@@ -1,0 +1,129 @@
+LAMMPS (29 Aug 2024 - Update 1)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:98)
+  using 1 OpenMP thread(s) per MPI task
+Loaded 1 plugins from C:\Users\mobal\AppData\Local\LAMMPS 64-bit 29Aug2024\plugins
+# LAMMPS input script for GO surface segregation in PEEK
+# Based on coarse-grained models
+
+# --- Initialization ---
+units           real
+atom_style      full
+boundary        p p f    # periodic in x,y, fixed in z (non-periodic)
+bond_style      harmonic
+angle_style     harmonic
+pair_style      lj/cut/coul/long 12.0
+kspace_style    pppm/stagger 1.0e-4    # Key fix: Use staggered PPPM for slab
+kspace_modify   slab 3.0               # Key fix: Define vacuum thickness
+special_bonds   lj 0.0 0.0 0.5
+
+# --- System definition ---
+read_data       data.gograft
+Reading data file ...
+  orthogonal box = (0 0 0) to (200 200 300)
+  1 by 1 by 1 MPI processor grid
+WARNING: Atom style in data file full atom style: atom-ID molecule-ID atom-type q x y z differs from currently defined atom style full (src/read_data.cpp:706)
+  reading atoms ...
+  20441 atoms
+  scanning bonds ...
+  2 = max bonds/atom
+  scanning angles ...
+  2 = max angles/atom
+  orthogonal box = (0 0 0) to (200 200 300)
+  1 by 1 by 1 MPI processor grid
+  reading bonds ...
+  25220 bonds
+  reading angles ...
+  24958 angles
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0        0        0.5     
+  special bond factors coul:  0        0        0       
+     4 = max # of 1-2 neighbors
+    12 = max # of 1-3 neighbors
+    48 = max # of 1-4 neighbors
+    24 = max # of special neighbors
+  special bonds CPU = 0.021 seconds
+  read_data CPU = 0.577 seconds
+
+# --- Force field parameters ---
+# LJ parameters for PEEK beads
+pair_coeff      1 1 0.100 3.95    # ether-linked phenyl bead
+pair_coeff      2 2 0.120 4.10    # ketone-linked phenyl bead
+
+# LJ parameters for GO beads
+pair_coeff      3 3 0.150 3.80    # GO carbon bead
+pair_coeff      4 4 0.200 3.60    # GO oxygen-containing group bead
+
+# LJ parameters for iC beads
+pair_coeff      5 5 0.180 4.20    # 3-linked b-D-galactopyranose bead
+pair_coeff      6 6 0.220 4.30    # 4-linked a-D-galactopyranose with sulfate bead
+
+# LJ parameters for reactive sites (type 7 - carboxyl groups)
+pair_coeff      7 7 0.20 3.50     # Critical fix for missing pair coefficients
+
+# Cross interactions use mixing rules (Lorentz-Berthelot)
+
+# Bond parameters
+bond_coeff      1 30.0 1.53    # PEEK backbone bonds
+bond_coeff      2 40.0 1.40    # GO sheet bonds
+bond_coeff      3 35.0 1.45    # iC backbone bonds
+bond_coeff      4 50.0 1.35    # Grafting bonds (iC to GO/PEEK)
+
+# Angle parameters
+angle_coeff     1 20.0 120.0   # PEEK backbone angles
+angle_coeff     2 30.0 120.0   # GO sheet angles
+angle_coeff     3 25.0 110.0   # iC backbone angles
+
+# --- Simulation settings ---
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# --- Initial minimization ---
+thermo          1000
+thermo_style    custom step temp press pe ke etotal density
+
+minimize        1.0e-4 1.0e-6 10000 100000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282–-3297}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+PPPM initialization ...
+WARNING: System is not charge neutral, net charge = -300 (src/kspace.cpp:327)
+  using 12-bit tables for long-range coulomb (src/kspace.cpp:342)
+  G vector (1/distance) = 0.088544323
+  grid = 8 8 32
+  stencil order = 5
+  estimated absolute RMS force accuracy = 0.044255465
+  estimated relative force accuracy = 0.00013327402
+  using double precision FFTW3
+  3d grid and FFT values/proc = 6664 2048
+Generated 21 of 21 mixed pair_coeff terms from geometric mixing rule
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 14
+  ghost atom cutoff = 14
+  binsize = 7, bins = 29 29 43
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair lj/cut/coul/long, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 28.68 | 28.68 | 28.68 Mbytes
+   Step          Temp          Press          PotEng         KinEng         TotEng        Density    
+         0   0              4.8721537e+24  2.1316609e+26  0              2.1316609e+26  0.22196978   

@@ -1,0 +1,128 @@
+# LAMMPS input script for GO surface segregation in PEEK
+# Based on coarse-grained models
+
+# --- Initialization ---
+units           real
+atom_style      full
+boundary        p p f    # periodic in x,y, fixed in z (non-periodic)
+bond_style      harmonic
+angle_style     harmonic
+pair_style      lj/cut/coul/long 12.0
+kspace_style    pppm/stagger 1.0e-4    # Key fix: Use staggered PPPM for slab
+kspace_modify   slab 3.0               # Key fix: Define vacuum thickness
+special_bonds   lj 0.0 0.0 0.5
+
+# --- System definition ---
+read_data       data.gograft
+
+# --- Force field parameters ---
+# LJ parameters for PEEK beads
+pair_coeff      1 1 0.100 3.95    # ether-linked phenyl bead
+pair_coeff      2 2 0.120 4.10    # ketone-linked phenyl bead
+
+# LJ parameters for GO beads
+pair_coeff      3 3 0.150 3.80    # GO carbon bead
+pair_coeff      4 4 0.200 3.60    # GO oxygen-containing group bead
+
+# LJ parameters for iC beads
+pair_coeff      5 5 0.180 4.20    # 3-linked b-D-galactopyranose bead
+pair_coeff      6 6 0.220 4.30    # 4-linked a-D-galactopyranose with sulfate bead
+
+# LJ parameters for reactive sites (type 7 - carboxyl groups)
+pair_coeff      7 7 0.20 3.50     # Critical fix for missing pair coefficients
+
+# Cross interactions use mixing rules (Lorentz-Berthelot)
+
+# Bond parameters
+bond_coeff      1 30.0 1.53    # PEEK backbone bonds
+bond_coeff      2 40.0 1.40    # GO sheet bonds
+bond_coeff      3 35.0 1.45    # iC backbone bonds
+bond_coeff      4 50.0 1.35    # Grafting bonds (iC to GO/PEEK)
+
+# Angle parameters
+angle_coeff     1 20.0 120.0   # PEEK backbone angles
+angle_coeff     2 30.0 120.0   # GO sheet angles
+angle_coeff     3 25.0 110.0   # iC backbone angles
+
+# --- Simulation settings ---
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# --- Initial minimization ---
+thermo          1000
+thermo_style    custom step temp press pe ke etotal density
+
+minimize        1.0e-4 1.0e-6 10000 100000
+reset_timestep  0
+
+# --- Equilibration at processing temperature ---
+velocity        all create 653.0 12345 mom yes rot yes dist gaussian
+
+fix             1 all npt temp 653.0 653.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+timestep        10.0
+thermo          1000
+dump            1 all custom 10000 dump.gograft.equilibration id type x y z
+
+run             1000000    # 10 ns
+
+# --- Production run at processing temperature ---
+unfix           1
+fix             1 all npt temp 653.0 653.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+undump          1
+dump            1 all custom 10000 dump.gograft.production id type x y z
+
+run             10000000   # 100 ns
+
+# --- Cooling to room temperature ---
+unfix           1
+fix             1 all npt temp 653.0 300.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+undump          1
+dump            1 all custom 10000 dump.gograft.cooling id type x y z
+
+run             3530000    # 35.3 ns (cooling rate of 10 K/ns)
+
+# --- Equilibration at room temperature ---
+unfix           1
+fix             1 all npt temp 300.0 300.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+undump          1
+dump            1 all custom 10000 dump.gograft.room_temp id type x y z
+
+run             1000000    # 10 ns
+
+# --- Activate surface for grafting ---
+group           surface_sites id 123 456 789 1011 1213    # Example IDs of surface sites
+set             group surface_sites type 7                # New type for reactive sites
+
+# --- Grafting simulation ---
+fix             2 all bond/create 1 7 5 3.0 4             # Create bonds between reactive sites and iC
+fix             3 all npt temp 300.0 300.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+undump          1
+dump            1 all custom 10000 dump.gograft.grafting id type x y z
+
+run             5000000    # 50 ns
+
+# --- Final analysis ---
+unfix           2
+unfix           3
+fix             3 all npt temp 300.0 300.0 100.0 x 1.0 1.0 1000.0 y 1.0 1.0 1000.0 couple xy
+dump            2 all custom 1000 dump.gograft.final id type x y z vx vy vz
+
+# Calculate RDFs
+compute         rdf all rdf 50 3 3 3 4 4 4 5 5 5 6 6 6 3 5 4 6
+fix             4 all ave/time 100 100 10000 c_rdf[*] file rdf.gograft mode vector
+
+# Calculate density profiles
+compute         layers all chunk/atom bin/1d z lower 0.5 units reduced
+compute         density all density/profile 50 z 0.0 0.1  # density along z
+fix             5 all ave/time 100 100 10000 c_density[*] file density_profile.dat mode vector
+
+# Calculate chain conformations
+group           peek type 1 2
+group           ic type 5 6
+compute         gyration_peek peek gyration
+compute         gyration_ic ic gyration
+fix             6 all ave/time 100 100 10000 c_gyration_peek c_gyration_ic file gyration.dat
+
+run             1000000    # 10 ns for analysis
+
+print           "Simulation complete"
